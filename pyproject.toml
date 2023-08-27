@@ -1,0 +1,38 @@
+[tool.poetry]
+name = "gentleboost"
+version = "0.1.0"
+description = ""
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+river = "^0.18.0"
+tqdm = { version = "^4.66.1", optional = true }
+black = { version = "^23.7.0", optional = true }
+isort = { version = "^5.12.0", optional = true }
+ruff = { version = "^0.0.286", optional = true }
+quarto = { version = "^0.1.0", optional = true }
+tabulate = { version = "^0.9.0", optional = true }
+
+[tool.poetry.extras]
+dev = [ "black", "ruff", "isort", "tqdm", "quarto", "tabulate" ]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.mccabe]
+max-complexity = 10
+
+[tool.black]
+line-length = 120
+target-version = ['py39']
+
+[tool.isort]
+profile = "black"
+line_length = 120
+include_trailing_comma = true

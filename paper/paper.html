@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.3.433">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Chapman Siu">
+<meta name="keywords" content="online boosting, adaboost, gentleadaboost, machine learning, classification">
+
+<title>Online GentleAdaBoost - Technical Report</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for citations */
+div.csl-bib-body { }
+div.csl-entry {
+  clear: both;
+}
+.hanging-indent div.csl-entry {
+  margin-left:2em;
+  text-indent:-2em;
+}
+div.csl-left-margin {
+  min-width:2em;
+  float:left;
+}
+div.csl-right-inline {
+  margin-left:2em;
+  padding-left:1em;
+}
+div.csl-indent {
+  margin-left: 2em;
+}</style>
+
+
+<script src="paper_files/libs/clipboard/clipboard.min.js"></script>
+<script src="paper_files/libs/quarto-html/quarto.js"></script>
+<script src="paper_files/libs/quarto-html/popper.min.js"></script>
+<script src="paper_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="paper_files/libs/quarto-html/anchor.min.js"></script>
+<link href="paper_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="paper_files/libs/quarto-html/quarto-syntax-highlighting.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="paper_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="paper_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="paper_files/libs/bootstrap/bootstrap.min.css" rel="stylesheet" id="quarto-bootstrap" data-mode="light">
+
+  <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+</head>
+
+<body>
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+  <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#sec-intro" id="toc-sec-intro" class="nav-link active" data-scroll-target="#sec-intro"><span class="header-section-number">1</span> Introduction</a></li>
+  <li><a href="#online-gentleboost" id="toc-online-gentleboost" class="nav-link" data-scroll-target="#online-gentleboost"><span class="header-section-number">2</span> Online Gentleboost</a></li>
+  <li><a href="#results" id="toc-results" class="nav-link" data-scroll-target="#results"><span class="header-section-number">3</span> Results</a></li>
+  <li><a href="#conclusion" id="toc-conclusion" class="nav-link" data-scroll-target="#conclusion"><span class="header-section-number">4</span> Conclusion</a></li>
+  <li><a href="#references" id="toc-references" class="nav-link" data-scroll-target="#references">References</a></li>
+  </ul>
+<div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="../paper.pdf"><i class="bi bi-file-pdf"></i>PDF (arxiv)</a></li></ul></div></nav>
+</div>
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Online GentleAdaBoost - Technical Report</h1>
+</div>
+
+
+<div class="quarto-title-meta-author">
+  <div class="quarto-title-meta-heading">Author</div>
+  <div class="quarto-title-meta-heading">Affiliation</div>
+  
+    <div class="quarto-title-meta-contents">
+    <p class="author">Chapman Siu </p>
+  </div>
+    <div class="quarto-title-meta-contents">
+        <p class="affiliation">
+            University of Technology Sydney
+          </p>
+      </div>
+    </div>
+
+<div class="quarto-title-meta">
+
+      
+  
+    
+  </div>
+  
+<div>
+  <div class="abstract">
+    <div class="abstract-title">Abstract</div>
+    <p>We study the online variant of GentleAdaboost, where we combine a weak learner to a strong learner in an online fashion. We provide an approach to extend the batch approach to an online approach with theoretical justifications through application of line search. Finally we compare our online boosting approach with other online approaches across a variety of benchmark datasets.</p>
+  </div>
+</div>
+
+</header>
+
+<section id="sec-intro" class="level1" data-number="1">
+<h1 data-number="1"><span class="header-section-number">1</span> Introduction</h1>
+<p>Boosting algorithms belong to a class of ensemble classification approaches which use weak assumptions on the learner to efficient manner to improve performance. GentleBoost is an algorithm which was first introduced as an alternative Adaboost approach which uses Newton steps rather than exact optimization on each step <span class="citation" data-cites="Friedman2000">(see <a href="#ref-Friedman2000" role="doc-biblioref">Friedman, Hastie, and Tibshirani 2000, p353</a>)</span>. Unlike other AdaBoost variants, GentleBoost has not received as much attention as it yields empirically inferior performance compared with other Adaboost algorithms when used on a wide range of benchmark datasets.</p>
+<p>In machine learning, the ability to extend algorithms from a batch setting to an online setting is an important topic. Online approaches can operate on streams and use datasets which are too large to fit in memory. In this technical report we provide an approach to extend GentleBoost to the online setting through using line search. In addition we perform experiments to demonstrate that the algorithm is theoretically sound and has practical usecases.</p>
+</section>
+<section id="online-gentleboost" class="level1" data-number="2">
+<h1 data-number="2"><span class="header-section-number">2</span> Online Gentleboost</h1>
+<p>To describe the Online Gentleboost algorithm, we first describe the Gentleboost algorithm for the two-class classification scenario. The fitting procedure uses training data <span class="math inline">\((x_1, y_1), \dots, (x_n, y_n)\)</span> where <span class="math inline">\(x_i\)</span> is a training instance vector and <span class="math inline">\(y_i \in \{-1, 1\}\)</span>. Then define <span class="math inline">\(F(x) = \sum_1^M f_m(x)\)</span> where every <span class="math inline">\(f_m(x)\)</span> is some weak classifier. Then the corresponding prediction is provided by <span class="math inline">\(\text{sign}(F(x))\)</span>. For Gentleboost, it uses the <em>exponential criterion</em>, <span class="math inline">\(J(F) = E(\exp^{-yF(x)})\)</span> for estimation of <span class="math inline">\(F(x)\)</span>.</p>
+<p>Then if we use Newton steps for minimizing <span class="math inline">\(J(F)\)</span></p>
+<p><span class="math display">\[\frac{\partial J(F(x) + f(x))}{\partial f(x)} \vert_{f(x)=0} = - E(\exp^{-yF(x)} y | x)\]</span></p>
+<p><span class="math display">\[\frac{\partial^2 J(F(x) + f(x))}{\partial f(x)^2} \vert_{f(x)=0} =  E(\exp^{-yF(x)} | x)\text{ , since } y^2=1\]</span></p>
+<p>The corresponding Newton update is</p>
+<p><span class="math display">\[F(x) \leftarrow F(x) + \frac{E(\exp^{-yF(x)} y | x)}{E(\exp^{-yF(x)} | x)}\]</span></p>
+<p>The GentleBoost algorithm is then summarised in <a href="#tbl-gentleboost">Table&nbsp;1</a> shown below</p>
+<div id="tbl-gentleboost" class="anchored">
+<table class="table">
+<caption>Table&nbsp;1: GentleBoost algorithm which is a modified version of AdaBoost that uses Newton stepping rather than exact optimization at each step</caption>
+<colgroup>
+<col style="width: 100%">
+</colgroup>
+<thead>
+<tr class="header">
+<th><strong>GentleBoost</strong> <span class="citation" data-cites="Friedman2000">(see <a href="#ref-Friedman2000" role="doc-biblioref">Friedman, Hastie, and Tibshirani 2000, p353</a>)</span> |</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><ol type="1">
+<li>Start with weights $w_i = 1/N, i = 1,2, , N, F(x) =0 $</li>
+<li>Repeat for <span class="math inline">\(m = 1,2, \dots, M\)</span>:
+<ol type="a">
+<li>Fit the regression function <span class="math inline">\(f_m(x)\)</span> by weighted least-squares of <span class="math inline">\(y_i\)</span> to <span class="math inline">\(x_i\)</span> with weights <span class="math inline">\(w_i\)</span>.</li>
+<li>Update <span class="math inline">\(F(x) \leftarrow F(x) + f_m(x)\)</span>.</li>
+<li>Update <span class="math inline">\(w_i \leftarrow w_i \exp(-y_i f_m(x_i))\)</span> and renormalize</li>
+</ol></li>
+<li>Output the classifier <span class="math inline">\(\text{sign}(F(x)) = \text{sign}(\sum_{m=1}^M f_m(x))\)</span>.</li>
+</ol></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>In our online boosting framework, the instances <span class="math inline">\((x_i, y_i)\)</span> only become available one at a time and the boosting algorithm must operate in an online fashion as well. As such it is not possible for the algorithm to determine the precise Newton Step at every instance. Instead, we perform line search over Newton steps, which is known to converge to the optimal Newton Step solution with sufficient small step. The choice of the step size becomes a hyperparameter related to the model, and removes the need to renormalize. The step size is chosen based on the observation it needs to be proportional to <span class="math inline">\(\exp(-y_i f_m(x_i))\)</span> and bounded by the range of <span class="math inline">\(\exp(-y_i f_m(x_i))\)</span> to meet the Lipschwitz condition <span class="citation" data-cites="Armijo1966">(<a href="#ref-Armijo1966" role="doc-biblioref">Armijo 1966</a>)</span>. Since <span class="math inline">\(-1 \leq -y_i f_m(x_i) \leq 1\)</span> then with the choice of hyperparamter <span class="math inline">\(\alpha \in (0, \exp(1)-1)\)</span> the step size <span class="math inline">\(\hat{\alpha}\)</span> is constructed as</p>
+<p><span class="math display">\[  \hat{\alpha} = \begin{cases}
+      \frac{1}{1+\alpha}, &amp; \text{if}\ \text{sign}(-y_i f_m(x_i)) &gt; 0 \\
+      1+\alpha, &amp; \text{otherwise}
+    \end{cases}\]</span></p>
+<p>As this approach uses a line search, any update function which directionally moves the weight in the correct direction will be suitable. The modified Online GentleBoost algorithm is summarised in <a href="#tbl-online-gentleboost">Table&nbsp;2</a> shown below</p>
+<div id="tbl-online-gentleboost" class="anchored">
+<table class="table">
+<caption>Table&nbsp;2: Online GentleBoost algorithm which is a modified version of GentleBoost to allow for online learning</caption>
+<colgroup>
+<col style="width: 100%">
+</colgroup>
+<thead>
+<tr class="header">
+<th><strong>Online GentleBoost</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><ol type="1">
+<li>Start $F(x) =0 $, with hyperparamter <span class="math inline">\(\alpha \in (0, \exp(1))\)</span></li>
+<li>For incoming instance <span class="math inline">\(x_i, y_i\)</span>, reset weight <span class="math inline">\(w_i = 1\)</span>:</li>
+<li>Repeat for <span class="math inline">\(m = 1,2, \dots, M\)</span>:
+<ol type="a">
+<li>Fit the regression function <span class="math inline">\(f_m(x)\)</span> by weighted least-squares of <span class="math inline">\(y_i\)</span> to <span class="math inline">\(x_i\)</span> with weights <span class="math inline">\(w_i\)</span>.</li>
+<li>Update <span class="math inline">\(F(x) \leftarrow F(x) + f_m(x)\)</span>.</li>
+<li>Update <span class="math inline">\(w_i \leftarrow \hat{\alpha} w_i\)</span> and renormalize |</li>
+</ol></li>
+<li>Go back to 2. if there are additional instances</li>
+<li>Finally output the classifier <span class="math inline">\(\text{sign}(F(x)) = \text{sign}(\sum_{m=1}^M f_m(x))\)</span>.</li>
+</ol></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="results" class="level1" data-number="3">
+<h1 data-number="3"><span class="header-section-number">3</span> Results</h1>
+<p>We use the benchmark datasets and approaches in the River <span class="citation" data-cites="montiel2021river">(<a href="#ref-montiel2021river" role="doc-biblioref">Montiel et al. 2021</a>)</span> library to demonstrate the efficacy of our approach.</p>
+<p>The model configuration uses the default settings and Hoeffding Trees <span class="citation" data-cites="MOA2010">Hulten, Spencer, and Domingos (<a href="#ref-hulten2001" role="doc-biblioref">2001</a>)</span> as the ensemble approach for AdaBoost <span class="citation" data-cites="oza01a">(<a href="#ref-oza01a" role="doc-biblioref">Oza and Russell 2001</a>)</span>, Bagging <span class="citation" data-cites="oza01a">(<a href="#ref-oza01a" role="doc-biblioref">Oza and Russell 2001</a>)</span>, GentleBoost algorithms. We also compare our approach with ADWIN Bagging <span class="citation" data-cites="MOA2010">Oza and Russell (<a href="#ref-oza01a" role="doc-biblioref">2001</a>)</span>, ALMA <span class="citation" data-cites="NIPS2000_d072677d">(<a href="#ref-NIPS2000_d072677d" role="doc-biblioref">Gentile 2000</a>)</span>, Adaptive Random Forest <span class="citation" data-cites="gomes2017adaptive">(<a href="#ref-gomes2017adaptive" role="doc-biblioref">Gomes et al. 2017</a>)</span>, Aggregated Mondrian Forest <span class="citation" data-cites="mourtada2019amf">(<a href="#ref-mourtada2019amf" role="doc-biblioref">Mourtada, Gaiffas, and Scornet 2019</a>)</span>, Naive Bayes and Logistic Regression.</p>
+<div id="tbl-results" class="anchored">
+<table class="table">
+<caption>Table&nbsp;3: Performance of Online GentleBoost compared with other algorithms in River</caption>
+<colgroup>
+<col style="width: 39%">
+<col style="width: 15%">
+<col style="width: 14%">
+<col style="width: 16%">
+<col style="width: 14%">
+</colgroup>
+<thead>
+<tr class="header">
+<th></th>
+<th>Bananas</th>
+<th>Elec2</th>
+<th>Phishing</th>
+<th>SMTP</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>ADWIN Bagging</td>
+<td>0.625967</td>
+<td>0.823773</td>
+<td>0.893515</td>
+<td>0.999685</td>
+</tr>
+<tr class="even">
+<td>ALMA</td>
+<td>0.506415</td>
+<td>0.906404</td>
+<td>0.8264</td>
+<td>0.764986</td>
+</tr>
+<tr class="odd">
+<td>AdaBoost</td>
+<td>0.677864</td>
+<td>0.880581</td>
+<td>0.878303</td>
+<td>0.999443</td>
+</tr>
+<tr class="even">
+<td>Adaptive Random Forest</td>
+<td>0.88696</td>
+<td>0.876608</td>
+<td>0.907926</td>
+<td>0.999685</td>
+</tr>
+<tr class="odd">
+<td>Aggregated Mondrian Forest</td>
+<td>0.884318</td>
+<td>0.854517</td>
+<td>0.888711</td>
+<td>0.999874</td>
+</tr>
+<tr class="even">
+<td>Bagging</td>
+<td>0.634082</td>
+<td>0.840436</td>
+<td>0.893515</td>
+<td>0.999685</td>
+</tr>
+<tr class="odd">
+<td>GentleBoost</td>
+<td>0.619362</td>
+<td>0.804352</td>
+<td>0.883106</td>
+<td>0.999685</td>
+</tr>
+<tr class="even">
+<td>Hoeffding Tree</td>
+<td>0.642197</td>
+<td>0.795635</td>
+<td>0.879904</td>
+<td>0.999685</td>
+</tr>
+<tr class="odd">
+<td>Logistic regression</td>
+<td>0.543019</td>
+<td>0.822166</td>
+<td>0.888</td>
+<td>0.999769</td>
+</tr>
+<tr class="even">
+<td>Naive Bayes</td>
+<td>0.61521</td>
+<td>0.728741</td>
+<td>0.884708</td>
+<td>0.993484</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>From the results above, we observe that GentleBoost generally performs worse across all datasets except for the Phishing dataset, however it demonstrates measureable uplift compared with the base weak learner (i.e.&nbsp;Hoeffding Tree).</p>
+<p>More empirical evidence is required to verify this claim, though we note this inferior results is consistent with the batch GentleBoost empirical results which have been previously reported <span class="citation" data-cites="Friedman2000">(see <a href="#ref-Friedman2000" role="doc-biblioref">Friedman, Hastie, and Tibshirani 2000, p365</a>)</span>.</p>
+</section>
+<section id="conclusion" class="level1" data-number="4">
+<h1 data-number="4"><span class="header-section-number">4</span> Conclusion</h1>
+<p>We have introduced Online Gentleboost, an extension of the original batch Gentleboost approach via line search. We have justified our approach theoretically and demonstrated empirically that Gentleboost does indeed improve upon the weak learner.</p>
+</section>
+<section id="references" class="level1 unnumbered">
+<h1 class="unnumbered">References</h1>
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-Armijo1966" class="csl-entry" role="listitem">
+Armijo, Larry. 1966. <span>“<span class="nocase">Minimization of functions having Lipschitz continuous first partial derivatives.</span>”</span> <em>Pacific Journal of Mathematics</em> 16 (1). Pacific Journal of Mathematics, A Non-profit Corporation: 1–3.
+</div>
+<div id="ref-MOA2010" class="csl-entry" role="listitem">
+Bifet, Albert, Geoff Holmes, Richard Kirkby, and Bernhard Pfahringer. 2010. <span>“MOA: Massive Online Analysis.”</span> <em>J. Mach. Learn. Res.</em> 11 (August). JMLR.org: 1601–4.
+</div>
+<div id="ref-Friedman2000" class="csl-entry" role="listitem">
+Friedman, Jerome, Trevor Hastie, and Robert Tibshirani. 2000. <span>“Special Invited Paper. Additive Logistic Regression: A Statistical View of Boosting.”</span> <em>The Annals of Statistics</em> 28 (2). Institute of Mathematical Statistics: 337–74. <a href="http://www.jstor.org/stable/2674028">http://www.jstor.org/stable/2674028</a>.
+</div>
+<div id="ref-NIPS2000_d072677d" class="csl-entry" role="listitem">
+Gentile, Claudio. 2000. <span>“A New Approximate Maximal Margin Classification Algorithm.”</span> In <em>Advances in Neural Information Processing Systems</em>, edited by T. Leen, T. Dietterich, and V. Tresp. Vol. 13. MIT Press. <a href="https://proceedings.neurips.cc/paper_files/paper/2000/file/d072677d210ac4c03ba046120f0802ec-Paper.pdf">https://proceedings.neurips.cc/paper_files/paper/2000/file/d072677d210ac4c03ba046120f0802ec-Paper.pdf</a>.
+</div>
+<div id="ref-gomes2017adaptive" class="csl-entry" role="listitem">
+Gomes, Heitor M, Albert Bifet, Jesse Read, Jean Paul Barddal, Fabricio Enembreck, Bernhard Pfharinger, Geoff Holmes, and Talel Abdessalem. 2017. <span>“Adaptive Random Forests for Evolving Data Stream Classification.”</span> <em>Machine Learning</em> 106. Springer: 1469–95.
+</div>
+<div id="ref-hulten2001" class="csl-entry" role="listitem">
+Hulten, Geoff, Laurie Spencer, and Pedro Domingos. 2001. <span>“Mining Time-Changing Data Streams.”</span> In <em>Proceedings of the Seventh ACM SIGKDD International Conference on Knowledge Discovery and Data Mining</em>, 97–106. KDD ’01. New York, NY, USA: Association for Computing Machinery. doi:<a href="https://doi.org/10.1145/502512.502529">10.1145/502512.502529</a>.
+</div>
+<div id="ref-montiel2021river" class="csl-entry" role="listitem">
+Montiel, Jacob, Max Halford, Saulo Martiello Mastelini, Geoffrey Bolmier, Raphael Sourty, Robin Vaysse, Adil Zouitine, et al. 2021. <span>“River: Machine Learning for Streaming Data in Python.”</span>
+</div>
+<div id="ref-mourtada2019amf" class="csl-entry" role="listitem">
+Mourtada, Jaouad, Stephane Gaiffas, and Erwan Scornet. 2019. <span>“Amf: Aggregated Mondrian Forests for Online Learning.”</span> <em>arXiv Preprint arXiv:1906.10529</em>.
+</div>
+<div id="ref-oza01a" class="csl-entry" role="listitem">
+Oza, Nikunj C., and Stuart J. Russell. 2001. <span>“Online Bagging and Boosting.”</span> In <em>Proceedings of the Eighth International Workshop on Artificial Intelligence and Statistics</em>, edited by Thomas S. Richardson and Tommi S. Jaakkola, R3:229–36. Proceedings of Machine Learning Research. PMLR. <a href="https://proceedings.mlr.press/r3/oza01a.html">https://proceedings.mlr.press/r3/oza01a.html</a>.
+</div>
+</div>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+window.document.addEventListener("DOMContentLoaded", function (event) {
+  const toggleBodyColorMode = (bsSheetEl) => {
+    const mode = bsSheetEl.getAttribute("data-mode");
+    const bodyEl = window.document.querySelector("body");
+    if (mode === "dark") {
+      bodyEl.classList.add("quarto-dark");
+      bodyEl.classList.remove("quarto-light");
+    } else {
+      bodyEl.classList.add("quarto-light");
+      bodyEl.classList.remove("quarto-dark");
+    }
+  }
+  const toggleBodyColorPrimary = () => {
+    const bsSheetEl = window.document.querySelector("link#quarto-bootstrap");
+    if (bsSheetEl) {
+      toggleBodyColorMode(bsSheetEl);
+    }
+  }
+  toggleBodyColorPrimary();  
+  const icon = "";
+  const anchorJS = new window.AnchorJS();
+  anchorJS.options = {
+    placement: 'right',
+    icon: icon
+  };
+  anchorJS.add('.anchored');
+  const isCodeAnnotation = (el) => {
+    for (const clz of el.classList) {
+      if (clz.startsWith('code-annotation-')) {                     
+        return true;
+      }
+    }
+    return false;
+  }
+  const clipboard = new window.ClipboardJS('.code-copy-button', {
+    text: function(trigger) {
+      const codeEl = trigger.previousElementSibling.cloneNode(true);
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+  });
+  clipboard.on('success', function(e) {
+    // button target
+    const button = e.trigger;
+    // don't keep focus
+    button.blur();
+    // flash "checked"
+    button.classList.add('code-copy-button-checked');
+    var currentTitle = button.getAttribute("title");
+    button.setAttribute("title", "Copied!");
+    let tooltip;
+    if (window.bootstrap) {
+      button.setAttribute("data-bs-toggle", "tooltip");
+      button.setAttribute("data-bs-placement", "left");
+      button.setAttribute("data-bs-title", "Copied!");
+      tooltip = new bootstrap.Tooltip(button, 
+        { trigger: "manual", 
+          customClass: "code-copy-button-tooltip",
+          offset: [0, -8]});
+      tooltip.show();    
+    }
+    setTimeout(function() {
+      if (tooltip) {
+        tooltip.hide();
+        button.removeAttribute("data-bs-title");
+        button.removeAttribute("data-bs-toggle");
+        button.removeAttribute("data-bs-placement");
+      }
+      button.setAttribute("title", currentTitle);
+      button.classList.remove('code-copy-button-checked');
+    }, 1000);
+    // clear code selection
+    e.clearSelection();
+  });
+  function tippyHover(el, contentFn) {
+    const config = {
+      allowHTML: true,
+      content: contentFn,
+      maxWidth: 500,
+      delay: 100,
+      arrow: false,
+      appendTo: function(el) {
+          return el.parentElement;
+      },
+      interactive: true,
+      interactiveBorder: 10,
+      theme: 'quarto',
+      placement: 'bottom-start'
+    };
+    window.tippy(el, config); 
+  }
+  const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+  for (var i=0; i<noterefs.length; i++) {
+    const ref = noterefs[i];
+    tippyHover(ref, function() {
+      // use id or data attribute instead here
+      let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+      try { href = new URL(href).hash; } catch {}
+      const id = href.replace(/^#\/?/, "");
+      const note = window.document.getElementById(id);
+      return note.innerHTML;
+    });
+  }
+      let selectedAnnoteEl;
+      const selectorForAnnotation = ( cell, annotation) => {
+        let cellAttr = 'data-code-cell="' + cell + '"';
+        let lineAttr = 'data-code-annotation="' +  annotation + '"';
+        const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+        return selector;
+      }
+      const selectCodeLines = (annoteEl) => {
+        const doc = window.document;
+        const targetCell = annoteEl.getAttribute("data-target-cell");
+        const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+        const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+        const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+        const lineIds = lines.map((line) => {
+          return targetCell + "-" + line;
+        })
+        let top = null;
+        let height = null;
+        let parent = null;
+        if (lineIds.length > 0) {
+            //compute the position of the single el (top and bottom and make a div)
+            const el = window.document.getElementById(lineIds[0]);
+            top = el.offsetTop;
+            height = el.offsetHeight;
+            parent = el.parentElement.parentElement;
+          if (lineIds.length > 1) {
+            const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+            const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+            height = bottom - top;
+          }
+          if (top !== null && height !== null && parent !== null) {
+            // cook up a div (if necessary) and position it 
+            let div = window.document.getElementById("code-annotation-line-highlight");
+            if (div === null) {
+              div = window.document.createElement("div");
+              div.setAttribute("id", "code-annotation-line-highlight");
+              div.style.position = 'absolute';
+              parent.appendChild(div);
+            }
+            div.style.top = top - 2 + "px";
+            div.style.height = height + 4 + "px";
+            let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+            if (gutterDiv === null) {
+              gutterDiv = window.document.createElement("div");
+              gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+              gutterDiv.style.position = 'absolute';
+              const codeCell = window.document.getElementById(targetCell);
+              const gutter = codeCell.querySelector('.code-annotation-gutter');
+              gutter.appendChild(gutterDiv);
+            }
+            gutterDiv.style.top = top - 2 + "px";
+            gutterDiv.style.height = height + 4 + "px";
+          }
+          selectedAnnoteEl = annoteEl;
+        }
+      };
+      const unselectCodeLines = () => {
+        const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+        elementsIds.forEach((elId) => {
+          const div = window.document.getElementById(elId);
+          if (div) {
+            div.remove();
+          }
+        });
+        selectedAnnoteEl = undefined;
+      };
+      // Attach click handler to the DT
+      const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+      for (const annoteDlNode of annoteDls) {
+        annoteDlNode.addEventListener('click', (event) => {
+          const clickedEl = event.target;
+          if (clickedEl !== selectedAnnoteEl) {
+            unselectCodeLines();
+            const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+            if (activeEl) {
+              activeEl.classList.remove('code-annotation-active');
+            }
+            selectCodeLines(clickedEl);
+            clickedEl.classList.add('code-annotation-active');
+          } else {
+            // Unselect the line
+            unselectCodeLines();
+            clickedEl.classList.remove('code-annotation-active');
+          }
+        });
+      }
+  const findCites = (el) => {
+    const parentEl = el.parentElement;
+    if (parentEl) {
+      const cites = parentEl.dataset.cites;
+      if (cites) {
+        return {
+          el,
+          cites: cites.split(' ')
+        };
+      } else {
+        return findCites(el.parentElement)
+      }
+    } else {
+      return undefined;
+    }
+  };
+  var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+  for (var i=0; i<bibliorefs.length; i++) {
+    const ref = bibliorefs[i];
+    const citeInfo = findCites(ref);
+    if (citeInfo) {
+      tippyHover(citeInfo.el, function() {
+        var popup = window.document.createElement('div');
+        citeInfo.cites.forEach(function(cite) {
+          var citeDiv = window.document.createElement('div');
+          citeDiv.classList.add('hanging-indent');
+          citeDiv.classList.add('csl-entry');
+          var biblioDiv = window.document.getElementById('ref-' + cite);
+          if (biblioDiv) {
+            citeDiv.innerHTML = biblioDiv.innerHTML;
+          }
+          popup.appendChild(citeDiv);
+        });
+        return popup.innerHTML;
+      });
+    }
+  }
+});
+</script>
+</div> <!-- /content -->
+
+
+
+</body></html>

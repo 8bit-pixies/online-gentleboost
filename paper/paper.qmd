@@ -1,0 +1,117 @@
+---
+title: "Online GentleAdaBoost - Technical Report"
+format:
+  arxiv-pdf:
+    keep-tex: true  
+    linenumbers: false
+    doublespacing: false
+    include-in-header:  
+      - text: |
+          \usepackage{algorithm}
+          \usepackage{algorithmic}
+  arxiv-html: default
+author:
+  - name: Chapman Siu
+    affiliations:
+      - name: University of Technology Sydney
+        department: Faculty of Engineering and Information Technology
+    email: chapman.siu@student.uts.edu.au
+abstract: |
+  We study the online variant of GentleAdaboost, where we combine a weak learner to a strong learner in an online fashion. We provide an approach to extend the batch approach to an online approach with theoretical justifications through application of line search. Finally we compare our online boosting approach with other online approaches across a variety of benchmark datasets.
+keywords: 
+  - online boosting
+  - adaboost
+  - gentleadaboost
+  - machine learning
+  - classification
+bibliography: bibliography.bib  
+---
+
+# Introduction {#sec-intro}
+
+Boosting algorithms belong to a class of ensemble classification approaches which use weak assumptions on the learner to efficient manner to improve performance. GentleBoost is an algorithm which was first introduced as an alternative Adaboost approach which uses Newton steps rather than exact optimization on each step [see @Friedman2000, p353]. Unlike other AdaBoost variants, GentleBoost has not received as much attention as it yields empirically inferior performance compared with other Adaboost algorithms when used on a wide range of benchmark datasets.
+
+In machine learning, the ability to extend algorithms from a batch setting to an online setting is an important topic. Online approaches can operate on streams and use datasets which are too large to fit in memory. In this technical report we provide an approach to extend GentleBoost to the online setting through using line search. In addition we perform experiments to demonstrate that the algorithm is theoretically sound and has practical usecases. 
+
+# Online Gentleboost
+
+To describe the Online Gentleboost algorithm, we first describe the Gentleboost algorithm for the two-class classification scenario. The fitting procedure uses training data $(x_1, y_1), \dots, (x_n, y_n)$ where $x_i$ is a training instance vector and $y_i \in \{-1, 1\}$. Then define $F(x) = \sum_1^M f_m(x)$ where every $f_m(x)$ is some weak classifier. Then the corresponding prediction is provided by $\text{sign}(F(x))$. For Gentleboost, it uses the _exponential criterion_, $J(F) = E(\exp^{-yF(x)})$ for estimation of $F(x)$. 
+
+Then if we use Newton steps for minimizing $J(F)$
+
+$$\frac{\partial J(F(x) + f(x))}{\partial f(x)} \vert_{f(x)=0} = - E(\exp^{-yF(x)} y | x)$$
+
+$$\frac{\partial^2 J(F(x) + f(x))}{\partial f(x)^2} \vert_{f(x)=0} =  E(\exp^{-yF(x)} | x)\text{ , since } y^2=1$$
+
+The corresponding Newton update is
+
+$$F(x) \leftarrow F(x) + \frac{E(\exp^{-yF(x)} y | x)}{E(\exp^{-yF(x)} | x)}$$
+
+The GentleBoost algorithm is then summarised in @tbl-gentleboost shown below
+
++-------------------------------------------------------------------------------------------------------------+
+| **GentleBoost** [see @Friedman2000, p353]                                                                |
++=============================================================================================================+
+| 1. Start with weights $w_i = 1/N, i = 1,2, \dots, N, F(x) =0 $                                              |
+| 2. Repeat for $m = 1,2, \dots, M$:                                                                          |
+|    a. Fit the regression function $f_m(x)$ by weighted least-squares of $y_i$ to $x_i$ with weights $w_i$.  |
+|    b. Update $F(x) \leftarrow F(x) + f_m(x)$.                                                               |
+|    c. Update $w_i \leftarrow w_i \exp(-y_i f_m(x_i))$ and renormalize                                       |
+| 3. Output the classifier $\text{sign}(F(x)) = \text{sign}(\sum_{m=1}^M f_m(x))$.                            |
++-------------------------------------------------------------------------------------------------------------+
+: GentleBoost algorithm which is a modified version of AdaBoost that uses Newton stepping rather than exact optimization at each step {#tbl-gentleboost}
+
+In our online boosting framework, the instances $(x_i, y_i)$ only become available one at a time and the boosting algorithm must operate in an online fashion as well. As such it is not possible for the algorithm to determine the precise Newton Step at every instance. Instead, we perform line search over Newton steps, which is known to converge to the optimal Newton Step solution with sufficient small step. The choice of the step size becomes a hyperparameter related to the model, and removes the need to renormalize. The step size is chosen based on the observation it needs to be proportional to $\exp(-y_i f_m(x_i))$ and bounded by the range of $\exp(-y_i f_m(x_i))$ to meet the Lipschwitz condition [@Armijo1966]. Since $-1 \leq -y_i f_m(x_i) \leq 1$ then with the choice of hyperparamter $\alpha \in (0, \exp(1)-1)$ the step size $\hat{\alpha}$ is constructed as 
+
+$$  \hat{\alpha} = \begin{cases}
+      \frac{1}{1+\alpha}, & \text{if}\ \text{sign}(-y_i f_m(x_i)) > 0 \\
+      1+\alpha, & \text{otherwise}
+    \end{cases}$$
+
+As this approach uses a line search, any update function which directionally moves the weight in the correct direction will be suitable. The modified Online GentleBoost algorithm is summarised in @tbl-online-gentleboost shown below
+
++-------------------------------------------------------------------------------------------------------------+
+| **Online GentleBoost**                                                                                      |
++=============================================================================================================+
+| 1. Start $F(x) =0 $, with hyperparamter $\alpha \in (0, \exp(1))$                                           |
+| 2. For incoming instance $x_i, y_i$, reset weight $w_i = 1$:                                                | 
+| 3. Repeat for $m = 1,2, \dots, M$:                                                                          |
+|    a. Fit the regression function $f_m(x)$ by weighted least-squares of $y_i$ to $x_i$ with weights $w_i$.  |
+|    b. Update $F(x) \leftarrow F(x) + f_m(x)$.                                                               |
+|    c. Update $w_i \leftarrow \hat{\alpha} w_i$ and renormalize                                       |
+| 4. Go back to 2. if there are additional instances                                                          |
+| 5. Finally output the classifier $\text{sign}(F(x)) = \text{sign}(\sum_{m=1}^M f_m(x))$.                    |
++-------------------------------------------------------------------------------------------------------------+
+: Online GentleBoost algorithm which is a modified version of GentleBoost to allow for online learning {#tbl-online-gentleboost}
+
+# Results
+
+We use the benchmark datasets and approaches in the River [@montiel2021river] library to demonstrate the efficacy of our approach.
+
+The model configuration uses the default settings and Hoeffding Trees [@MOA2010,@hulten2001] as the ensemble approach for AdaBoost [@oza01a], Bagging [@oza01a], GentleBoost algorithms. We also compare our approach with ADWIN Bagging [@MOA2010, @oza01a], ALMA [@NIPS2000_d072677d], Adaptive Random Forest [@gomes2017adaptive], Aggregated Mondrian Forest [@mourtada2019amf], Naive Bayes and Logistic Regression.
+
+```{python}
+#| echo: false
+#| output: asis
+import pandas as pd
+
+df = pd.read_csv("binary_classification.csv").groupby(["dataset", "model"]).last().reset_index()
+df = df[~df['model'].isin(['Hoeffding Adaptive Tree', 'Leveraging Bagging'])]
+df_pivot = df.pivot(index="model", columns="dataset",values= "Accuracy")
+df_pivot.index.name = ''
+print(df_pivot.to_markdown(tablefmt='github'))
+```
+: Performance of Online GentleBoost compared with other algorithms in River {#tbl-results}
+
+From the results above, we observe that GentleBoost generally performs worse across all datasets except for the Phishing dataset, however it demonstrates measureable uplift compared with the base weak learner (i.e. Hoeffding Tree).
+
+More empirical evidence is required to verify this claim, though we note this inferior results is consistent with the batch GentleBoost empirical results which have been previously reported  [see @Friedman2000, p365].
+
+# Conclusion
+
+We have introduced Online Gentleboost, an extension of the original batch Gentleboost approach via line search. We have justified our approach theoretically and demonstrated empirically that Gentleboost does indeed improve upon the weak learner. 
+
+# References {.unnumbered}
+
+::: {#refs}
+:::
