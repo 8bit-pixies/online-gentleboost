@@ -14,7 +14,7 @@ In our technical report we explore a theoretical sound and straightforward way t
 | 3. Repeat for $m = 1,2, \dots, M$:                                                                          |
 |    a. Fit the regression function $f_m(x)$ by weighted least-squares of $y_i$ to $x_i$ with weights $w_i$.  |
 |    b. Update $F(x) \leftarrow F(x) + f_m(x)$.                                                               |
-|    c. Update $w_i \leftarrow \hat{\alpha} w_i$ and renormalize                                       |
+|    c. Update $w_i \leftarrow \hat{\alpha} w_i$ and renormalize                                              |
 | 4. Go back to 2. if there are additional instances                                                          |
 | 5. Finally output the classifier $\text{sign}(F(x)) = \text{sign}(\sum_{m=1}^M f_m(x))$.                    |
 +-------------------------------------------------------------------------------------------------------------+
