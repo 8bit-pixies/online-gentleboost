@@ -20,3 +20,14 @@ In our technical report we explore a theoretical sound and straightforward way t
 ---
 
 Empirically GentleBoost does indeed create a stronger learner from the weak learner. Compared to other boosting approaches, GentleBoost may be a bit _too_ gentle, and from multiple experiments appears to be inferior to other approaches. Online Gentleboost is extremely straightforward to implement and understand and may have implications in other contexts such as Deep Learning architectures where we boost models which used parameter sharing. That can be a discussion and topic for exploration at a later stage. 
+
+Cite:
+
+```
+@article{siu2023online,
+  title={Online GentleAdaBoost--Technical Report},
+  author={Siu, Chapman},
+  journal={arXiv preprint arXiv:2308.14004},
+  year={2023}
+}
+```
